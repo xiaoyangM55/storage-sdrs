@@ -161,15 +161,6 @@ public class RetentionRulesServiceImpl implements RetentionRulesService {
     return mapRuleToResponse(rule);
   }
 
-  @Override
-  public RetentionRule getRetentionRuleByRuleId(Integer ruleId) throws SQLException {
-    RetentionRule entity = ruleDao.findById(ruleId);
-    if (entity == null || !entity.getIsActive()) {
-      throw new SQLException(String.format("No rule exists with ID: %s", ruleId));
-    }
-    return entity;
-  }
-
   /**
    * Updates an existing retention rule
    *
@@ -181,7 +172,11 @@ public class RetentionRulesServiceImpl implements RetentionRulesService {
   public RetentionRuleResponse updateRetentionRule(
       Integer ruleId, RetentionRuleUpdateRequest request) throws SQLException {
 
-    RetentionRule entity = getRetentionRuleByRuleId(ruleId);
+    RetentionRule entity = ruleDao.findById(ruleId);
+
+    if (entity == null || !entity.getIsActive()) {
+      throw new SQLException(String.format("No rule exists with ID: %s", ruleId));
+    }
 
     entity.setVersion(entity.getVersion() + 1);
     entity.setRetentionValue(

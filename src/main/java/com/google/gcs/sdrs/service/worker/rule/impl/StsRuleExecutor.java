@@ -29,7 +29,6 @@ import com.google.api.services.storagetransfer.v1.model.TransferOptions;
 import com.google.api.services.storagetransfer.v1.model.TransferSpec;
 import com.google.gcs.sdrs.SdrsApplication;
 import com.google.gcs.sdrs.common.RetentionRuleType;
-import com.google.gcs.sdrs.common.RetentionUnitType;
 import com.google.gcs.sdrs.common.RetentionValue;
 import com.google.gcs.sdrs.controller.validation.ValidationConstants;
 import com.google.gcs.sdrs.dao.DmQueueDao;
@@ -46,7 +45,6 @@ import com.google.gcs.sdrs.service.mq.pojo.InactiveDatasetMessage;
 import com.google.gcs.sdrs.service.worker.BaseWorker;
 import com.google.gcs.sdrs.service.worker.rule.RuleExecutor;
 import com.google.gcs.sdrs.util.CredentialsUtil;
-import com.google.gcs.sdrs.util.GcsHelper;
 import com.google.gcs.sdrs.util.PrefixGeneratorUtility;
 import com.google.gcs.sdrs.util.RetentionUtil;
 import com.google.gcs.sdrs.util.StsUtil;
@@ -198,22 +196,13 @@ public class StsRuleExecutor implements RuleExecutor {
           continue;
         }
 
-        RetentionValue retentionValue = RetentionValue.parse(datasetRule.getRetentionValue());
-        String datasetPath = RetentionUtil.getDatasetPath(datasetRule.getDataStorageName());
-        List<String> tmpPrefixes = null;
-
-        if (retentionValue.getUnitType() == RetentionUnitType.VERSION) {
-          String prefix = RetentionUtil.generateValidPrefixForListingObjects(datasetPath);
-          List<String> objectsPath = GcsHelper.getInstance().listObjectsWithPrefixInBucket(
-              bucketName, prefix);
-          tmpPrefixes = PrefixGeneratorUtility.generateVersionPrefix(objectsPath,
-              retentionValue.getNumber());
-        } else {
-          tmpPrefixes = PrefixGeneratorUtility.generateTimePrefixes(datasetPath,
-              zonedDateTimeNow.minusDays(StsUtil.STS_LOOKBACK_DAYS),
-              zonedDateTimeNow.minusDays(
-                  RetentionValue.convertValue(retentionValue)));
-        }
+        List<String> tmpPrefixes =
+            PrefixGeneratorUtility.generateTimePrefixes(
+                RetentionUtil.getDatasetPath(datasetRule.getDataStorageName()),
+                zonedDateTimeNow.minusDays(StsUtil.STS_LOOKBACK_DAYS),
+                zonedDateTimeNow.minusDays(
+                    RetentionValue.convertValue(
+                        RetentionValue.parse(datasetRule.getRetentionValue()))));
         prefixesPerDatasetMap.put(datasetRule.getDataStorageName(), tmpPrefixes);
         prefixes.addAll(tmpPrefixes);
       }
