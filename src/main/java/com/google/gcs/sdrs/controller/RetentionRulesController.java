@@ -21,7 +21,6 @@ package com.google.gcs.sdrs.controller;
 import com.google.gcs.sdrs.SdrsApplication;
 import com.google.gcs.sdrs.common.RetentionRuleType;
 import com.google.gcs.sdrs.common.RetentionUnitType;
-import com.google.gcs.sdrs.common.RetentionValue;
 import com.google.gcs.sdrs.controller.filter.UserInfo;
 import com.google.gcs.sdrs.controller.pojo.RetentionRuleCreateRequest;
 import com.google.gcs.sdrs.controller.pojo.RetentionRuleCreateResponse;
@@ -31,7 +30,6 @@ import com.google.gcs.sdrs.controller.pojo.RetentionRuleUpdateRequest;
 import com.google.gcs.sdrs.controller.validation.FieldValidations;
 import com.google.gcs.sdrs.controller.validation.ValidationConstants;
 import com.google.gcs.sdrs.controller.validation.ValidationResult;
-import com.google.gcs.sdrs.dao.model.RetentionRule;
 import com.google.gcs.sdrs.service.RetentionRulesService;
 import com.google.gcs.sdrs.service.impl.RetentionRulesServiceImpl;
 import com.google.gcs.sdrs.util.RetentionUtil;
@@ -124,9 +122,7 @@ public class RetentionRulesController extends BaseController {
   @Produces(MediaType.APPLICATION_JSON)
   public Response update(@PathParam("ruleId") Integer ruleId, RetentionRuleUpdateRequest request) {
     try {
-      RetentionRule rule = service.getRetentionRuleByRuleId(ruleId);
-      RetentionValue retentionValue = RetentionValue.parse(rule.getRetentionValue());
-      validateUpdate(request, retentionValue);
+      validateUpdate(request);
       RetentionRuleResponse response = service.updateRetentionRule(ruleId, request);
       return successResponse(response);
     } catch (Exception exception) {
@@ -197,8 +193,7 @@ public class RetentionRulesController extends BaseController {
     Collection<ValidationResult> partialValidations =
         validateCompositeKey(
             retentionRuleType, request.getProjectId(), request.getDataStorageName());
-    partialValidations.add(validateRetentionValue(request.getRetentionPeriodUnit(),
-        request.getRetentionPeriod()));
+    partialValidations.add(validateRetentionPeriod(request.getRetentionPeriod()));
     partialValidations.add(validateRetentionUnit(request.getRetentionPeriodUnit()));
 
     ValidationResult result = ValidationResult.compose(partialValidations);
@@ -271,17 +266,15 @@ public class RetentionRulesController extends BaseController {
     return partialValidations;
   }
 
-  private void validateUpdate(RetentionRuleUpdateRequest request, RetentionValue retentionValue)
-      throws ValidationException {
-    ValidationResult result = validateRetentionValue(retentionValue.getUnitTypeString(),
-        request.getRetentionPeriod());
+  private void validateUpdate(RetentionRuleUpdateRequest request) throws ValidationException {
+    ValidationResult result = validateRetentionPeriod(request.getRetentionPeriod());
 
     if (!result.isValid) {
       throw new ValidationException(result);
     }
   }
 
-  private ValidationResult validateRetentionValue(String retentionUnit, Integer retentionPeriod) {
+  private ValidationResult validateRetentionPeriod(Integer retentionPeriod) {
     Collection<String> messages = new HashSet<>();
     if (retentionPeriod == null) {
       messages.add("retentionPeriod must be provided");
@@ -289,43 +282,11 @@ public class RetentionRulesController extends BaseController {
       if (retentionPeriod < 0) {
         messages.add("retentionPeriod must be at least 0");
       }
-      RetentionUnitType type = RetentionUnitType.getType(retentionUnit);
-      if (type == null) {
+      if (retentionPeriod > ValidationConstants.RETENTION_MAX_VALUE) {
         messages.add(
             String.format(
-                "retentionPeriodUnit must be provided and is one of [%s, %s, %s]",
-                RetentionUnitType.DAY.toString(),
-                RetentionUnitType.MONTH.toString(),
-                RetentionUnitType.VERSION.toString()));
-      } else {
-        switch (type) {
-          case DAY:
-            if (retentionPeriod > ValidationConstants.RETENTION_MAX_VALUE_DAY) {
-              messages.add(
-                  String.format(
-                      "retentionPeriod exceeds maximum value of retentionPeriodUnit %s of %d",
-                      RetentionUnitType.DAY.toString(), ValidationConstants.RETENTION_MAX_VALUE_DAY));
-            }
-            break;
-          case MONTH:
-            if (retentionPeriod > ValidationConstants.RETENTION_MAX_VALUE_MONTH) {
-              messages.add(
-                  String.format(
-                      "retentionPeriod exceeds maximum value of retentionPeriodUnit %s of %d",
-                      RetentionUnitType.MONTH.toString(), ValidationConstants.RETENTION_MAX_VALUE_MONTH));
-            }
-            break;
-          case VERSION:
-            if (retentionPeriod > ValidationConstants.RETENTION_MAX_VALUE_VERSION) {
-              messages.add(
-                  String.format(
-                      "retentionPeriod exceeds maximum value of retentionPeriodUnit %s of %d",
-                      RetentionUnitType.VERSION.toString(), ValidationConstants.RETENTION_MAX_VALUE_VERSION));
-            }
-            break;
-          default:
-            break;
-        }
+                "retentionPeriod exceeds maximum value of %d",
+                ValidationConstants.RETENTION_MAX_VALUE));
       }
     }
     return new ValidationResult(messages);
@@ -335,15 +296,13 @@ public class RetentionRulesController extends BaseController {
     Collection<String> messages = new HashSet<>();
     if (retentionUnit != null) {
       RetentionUnitType type = RetentionUnitType.getType(retentionUnit);
-      if (type == null) {
+      // no support for version right now
+      if (type == null || type == RetentionUnitType.VERSION) {
         messages.add(
             String.format(
-                "retentionPeriodUnit has to be one of [%s, %s, %s]",
-                RetentionUnitType.DAY.toString(), RetentionUnitType.MONTH.toString(),
-                RetentionUnitType.VERSION.toString()));
+                "retentionPeriodUnit has to be one of [%s, %s]",
+                RetentionUnitType.DAY.toString(), RetentionUnitType.MONTH.toString()));
       }
-    } else {
-      messages.add("retentionPeriodUnit must be provided");
     }
 
     return new ValidationResult(messages);
